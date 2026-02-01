@@ -1,0 +1,866 @@
+{
+  "name": "Email_Phising_Campaign_Detection_N8N",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "=https://www.virustotal.com/api/v3/analyses/{{ $json.data.id }}\n",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "virusTotalApi",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -1344,
+        240
+      ],
+      "id": "5e6d4919-4ee6-4c31-af83-d9fb19b6f15e",
+      "name": "VirusTotal GET Request",
+      "retryOnFail": false,
+      "credentials": {
+        "virusTotalApi": {
+          "id": "ugyHtQge6rrrClIV",
+          "name": "VirusTotal account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n/**\n * =========================\n * IDENTIFY SOURCES AFTER MERGE\n * =========================\n */\n\n// VirusTotal (authoritative)\nconst vtItem = items.find(i => i.json?.vt?.data?.attributes);\n\n// HackerNews (optional enrichment)\nconst hnItem = items.find(i => i.json?.hn_article_available !== undefined);\n\n/**\n * =========================\n * HARD VALIDATION\n * =========================\n */\nif (!vtItem) {\n  throw new Error(\"VirusTotal data missing after merge\");\n}\n\n/**\n * =========================\n * TIMESTAMP (SIEM STANDARD)\n * =========================\n */\nconst now = new Date().toISOString();\n\n/**\n * =========================\n * ENDPOINT TELEMETRY (PROTOTYPE)\n * =========================\n */\nconst endpointTelemetry = {\n  source_ip: \"192.0.2.45\",\n  endpoint_hostname: \"HR-LAPTOP-Digital-Fortress-PC-07\",\n  endpoint_user: \"j.smith\",\n  timestamp: now\n};\n\n/**\n * =========================\n * NORMALIZED OUTPUT\n * =========================\n */\nreturn [\n  {\n    json: {\n      // =========================\n      // PRIMARY EVIDENCE (AUTHORITATIVE)\n      // =========================\n      virustotal: {\n        id: vtItem.json.vt.data.id,\n        type: vtItem.json.vt.data.type,\n        attributes: vtItem.json.vt.data.attributes\n      },\n\n      // =========================\n      // OPTIONAL ENRICHMENT\n      // =========================\n      hackernews: hnItem\n        ? {\n            available: hnItem.json.hn_article_available,\n            title: hnItem.json.hn_article_title,\n            url: hnItem.json.hn_article_url,\n            summary: hnItem.json.hn_article_summary\n          }\n        : null,\n\n      // =========================\n      // OBSERVED TELEMETRY\n      // =========================\n      endpoint_telemetry: endpointTelemetry,\n\n      // =========================\n      // META\n      // =========================\n      processed_at: now\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -448,
+        288
+      ],
+      "id": "b5b6a3f3-cf9a-4e8c-9061-d104e999cef9",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.virustotal.com/api/v3/urls",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "virusTotalApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/x-www-form-urlencoded",
+        "body": "=url={{$json.url}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -1792,
+        240
+      ],
+      "id": "c13a7632-03a5-4631-9f25-1107551bd4c5",
+      "name": "VirusTotal POST Request2",
+      "credentials": {
+        "virusTotalApi": {
+          "id": "ugyHtQge6rrrClIV",
+          "name": "VirusTotal account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "api/url/analyze",
+        "responseMode": "responseNode",
+        "options": {
+          "allowedOrigins": "*",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, x-api-key"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -3136,
+        240
+      ],
+      "id": "5f009348-acab-461a-9679-bb2240f77ca4",
+      "name": "Webhook2",
+      "webhookId": "891a9e45-a33f-4ce3-aede-fb58d269e1a1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const agentText = $node[\"IncidentRespond-Agent2\"].json.text\n  || $node[\"IncidentRespond-Agent2\"].json.output\n  || $node[\"IncidentRespond-Agent2\"].json.response\n  || \"\";\n\nreturn [{\n  json: {\n    status: \"success\",\n    agent_output: agentText\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        128,
+        496
+      ],
+      "id": "f70b25cb-4934-4c14-85a2-434e00260971",
+      "name": "Format API Response2"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={\n  \"verdict\": \"={{$json.verdict}}\",\n  \"incident_analysis\": \"={{$json.incident_analysis}}\",\n  \"email_phishing_analysis\": {\n    \"subject\": \"={{$json.email_phishing_analysis.subject}}\",\n    \"sender\": \"={{$json.email_phishing_analysis.sender}}\",\n    \"cleaned_body\": \"={{$json.email_phishing_analysis.cleaned_body}}\",\n    \"predicted_class\": \"={{$json.email_phishing_analysis.predicted_class}}\",\n    \"confidence\": \"={{$json.email_phishing_analysis.confidence}}\",\n    \"accuracy\": \"={{$json.email_phishing_analysis.accuracy}}\",\n    \"url_detected\": \"={{$json.email_phishing_analysis.url_detected}}\",\n    \"verdict\": \"={{$json.email_phishing_analysis.verdict}}\"\n  }\n}\n\n",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              },
+              {
+                "name": "Access-Control-Allow-Headers",
+                "value": "Content-Type, x-api-key"
+              },
+              {
+                "name": "Access-Control-Allow-Methods",
+                "value": "POST, OPTIONS"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        800,
+        336
+      ],
+      "id": "6442cf51-22a6-4229-bbba-150b126d8bb1",
+      "name": "Respond to Webhook2"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyize the results of the URL based on the datagiven to you\n\nVirusTotal JSON:\n{{ JSON.stringify($json.virustotal.attributes, null, 2) }}\n\n\n",
+        "options": {
+          "systemMessage": "You are a corporate cybersecurity awareness and incident notification agent.\n\nYour role is to communicate security findings to non-technical users in a clear, professional, and reassuring manner, similar to real enterprise IT security communications used by enterprise IT and security teams.\n\nObjective:\nBased on the final classification result derived from VirusTotal URL analysis (PHISHING or LEGITIMATE), generate a single, user-facing security notification message suitable for email delivery.\n\nInput Context:\n- You will receive VirusTotal URL analysis data and a final verdict.\n- You must internally review VirusTotal indicators such as categories, labels, and vendor verdict wording to understand the nature of the threat.\n- You must NOT expose technical details, detection counts, vendor names, MITRE techniques, APIs, or tooling in the final message.\n- You must NOT invent findings beyond what VirusTotal data reasonably supports.\n\nInternal Reasoning Rules (Not Visible to User):\n- If VirusTotal indicates phishing, fraud, scam, or social engineering, infer the phishing type at a high level:\n  - Link-based phishing → describe as “deceptive links designed to mislead users”\n  - Credential harvesting indicators → describe as “attempts to capture account information”\n  - Brand or service impersonation → describe as “impersonation of trusted services”\n- If VirusTotal does not clearly indicate the phishing method, describe the risk in general terms without speculation.\n\nCommunication Rules (Strict):\n- Write for non-technical users.\n- Use a calm, professional, enterprise IT tone.\n- Avoid fear-based language.\n- Avoid technical jargon (no hashes, engines, APIs, JSON, or MITRE references).\n- Avoid instructional language using “do not”, “don’t”, or blame-focused phrasing.\n- Explain risk in plain language, focusing on real-world impact.\n- Clearly state whether the link is unsafe or safe based on analysis.\n- Reference that a security review was performed, without naming tools.\n- Produce the message ONCE only.\n\nIf the Verdict is PHISHING:\n- Clearly state that the link was identified as unsafe following security analysis.\n- Explain, in plain language, the likely phishing approach based on VirusTotal evidence (e.g., deceptive link, impersonation, account access risk).\n- Explain potential impact in simple terms such as account exposure, unauthorized access, or follow-up targeted attacks.\n- Emphasize awareness, caution, and reporting in a supportive and professional manner.\n- Provide short, positive security awareness guidance (e.g., “Always verify unexpected links”, “Stay alert to messages requesting urgent action”).\n\nIf the Verdict is LEGITIMATE:\n- Clearly state that the link was reviewed and no malicious indicators were identified at this time.\n- Reinforce ongoing awareness and cautious online behavior.\n- Avoid declaring the link as completely safe; use language such as “no security concerns identified during this review”.\n\nRequired Output Style:\n- Email-style message\n- Professional greeting\n- Clear explanation of the situation\n- Short awareness guidance section\n- No long bullet lists\n- No technical references\n- No assumptions beyond VirusTotal data\n\nThe goal is to ensure the recipient understands:\n- What happened\n- Why it matters\n- How to stay safe\n\nWithout overwhelming them or exposing internal security details.\n\nIMPORTANT EMAIL DELIVERY RULE (ANTI-SPAM & USER SAFETY):\n\nIf a URL is classified as PHISHING or malicious, you MUST NOT include it in an active or clickable format.\n\nTo prevent email spam filtering and accidental user interaction, always display unsafe URLs in a deactivated form by:\n- Replacing \"http\" or \"https\" with \"hxxp\" or \"hxxps\"\n- Replacing \".\" with \"[.]\"\n\nExample:\nOriginal: https://example.com/login\nSafe format: hxxps://example[.]com/login\n\nThis formatting must be applied consistently to all malicious or phishing URLs included in email output.\n\nIf the URL is classified as LEGITIMATE, it may be shown normally but"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -224,
+        0
+      ],
+      "id": "05b1c4f2-07ed-4ff7-ac90-08aff42044d3",
+      "name": "NonTech-Agent2"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Primary Inputs\n\nUse the following inputs exactly as provided.\n\nVirusTotal JSON (authoritative for classification):\n{{ JSON.stringify($json.virustotal?.attributes ?? $json.data?.attributes ?? {}, null, 2) }}\n\nHacker News JSON (context only; must not influence the verdict):\n{{ JSON.stringify($json.hackernews ?? null, null, 2) }}\n\nObserved Endpoint Telemetry (context only; when provided):\n{{ JSON.stringify($json.endpoint_telemetry ?? null, null, 2) }}\n\nClassification Rules (STRICT)\n\nDetermine PHISHING or LEGITIMATE using VirusTotal data ONLY.\n\nClassify as PHISHING if:\n\nmalicious > 0, OR\n\nAny VirusTotal vendor explicitly labels the URL as phishing, fraud, scam, credential theft, or malicious.\n\nOtherwise classify as LEGITIMATE.\n\nIf malicious = 0 and no explicit phishing labels exist, verdict remains LEGITIMATE, but include the required “Zero-day consideration” note in the report.\n\nHacker News data MUST NOT influence the verdict.",
+        "options": {
+          "systemMessage": "You are a cybersecurity Incident Response (IR) analyst specializing in phishing detection, URL reputation analysis, and evidence-based reporting.\n\nMission\nGiven a completed VirusTotal URL analysis (JSON), produce ONE professional incident response report that classifies the URL as PHISHING or LEGITIMATE. Optionally enrich the report with up to 3 relevant Hacker News articles ONLY when phishing is confirmed, and only if those articles are provided by a tool/node.\n\nCore Principles (Strict)\n\nEvidence-first: VirusTotal is the ONLY authoritative source for verdict and technical conclusions.\n\nNo hallucinations: Do NOT invent fields, counts, vendor verdicts, categories, tags, behaviors, or impacts.\n\nNo duplication: Produce the report ONE time only. Do not re-run or restate the analysis twice.\n\nClear uncertainty: If any required detail is missing, write: \"Not provided in VirusTotal data.\"\n\nEmail-safe output: If verdict is PHISHING, defang the URL (hxxp/hxxps and [.]).\n\nKeep the report professional and actionable, aligned to real-world incident response operations.\n\nClassification Logic (Mandatory)\nClassify as PHISHING if either:\n\nmalicious > 0, OR\n\nANY vendor verdict explicitly includes: phishing, fraud, credential theft, scam, malicious.\nOtherwise classify as LEGITIMATE.\n\nVirusTotal Interpretation Rules\n\nMixed vendor results are allowed. A non-zero malicious count or explicit phishing verdict(s) is sufficient for PHISHING.\n\nDo not claim \"fake login\", \"credential harvesting\", or \"malware delivery\" unless VirusTotal categories/tags/verdict wording explicitly supports it.\n\nZero-Day / Unknown URL Handling (Non-Evidentiary, Must Not Change Verdict)\nIf VirusTotal indicates malicious = 0 and no vendor explicitly labels the URL as phishing/fraud/scam/malicious, you MUST still classify the URL as LEGITIMATE (per the mandatory classification logic).\n\nHowever, you must additionally include a short note in the report acknowledging that “LEGITIMATE in VirusTotal does not guarantee safety” and that the URL could still be new/zero-day or not yet categorized by vendors.\n\nIn that case, add this exact line under 2) Evidence (VirusTotal) → Technical Analysis (after the counts):\n\nZero-day consideration: VirusTotal shows no malicious detections, but newly registered or low-prevalence URLs may be under-detected; treat as potentially suspicious until confirmed by additional telemetry.\n\nYou may recommend safe, non-assumptive follow-ups in 6) Recommended Actions, such as:\n\n“Monitor web/proxy/DNS logs for access attempts to this URL/domain.”\n\n“Check email gateway logs for recipients and click activity.”\n\n“If clicked, review endpoint telemetry for unusual process/network activity.”\n\n“Consider sandbox detonation or URL rewriting/click-tracking review (if available).”\n\nYou must NOT claim phishing behavior, credential theft, compromise, or malicious intent unless supported by VirusTotal evidence.\n\nMITRE ATT&CK Mapping (Evidence-Based Only)\nOnly map MITRE if phishing is supported by VirusTotal evidence.\nAllowed mapping set:\n\nTactic: Initial Access\n\nTechnique: T1566 (Phishing) with link: https://attack.mitre.org/techniques/T1566/\n\nSub-technique: T1566.002 (Phishing: Spearphishing Link) ONLY if VirusTotal evidence supports a link-based lure, with link: https://attack.mitre.org/techniques/T1566/002/\n\nIf VirusTotal does not explicitly justify MITRE mapping, write:\n\"MITRE ATT&CK: Not observed in provided data.\"\n\nHacker News Enrichment (Context Only, Non-Evidentiary)\nYou may have access to a Hacker News tool/node that returns search results (JSON).\nRules:\n\nUse Hacker News enrichment ONLY if the final verdict is PHISHING.\n\nDo NOT search for or reference the specific malicious URL.\n\nPrefer broad security keywords aligned with the threat type (e.g., \"phishing\", \"spear phishing\", \"credential theft\", \"malicious link\", \"social engineering\").\n\nSelect up to 3 relevant articles that are suitable for non-technical readers.\n\nHacker News content must NEVER influence the phishing classification decision.\n\nIf no Hacker News data is provided or no relevant articles exist, state:\n\"Hacker News References: Not provided / not available in this execution.\"\n\nNever invent article titles or links.\n\nEmail Delivery Safety (Mandatory)\nIf verdict is PHISHING:\n\nDisplay the analyzed URL only in defanged format:\n\nReplace http/https with hxxp/hxxps\n\nReplace \".\" with \"[.]\"\nExample:\nhttps://example.com/login\n → hxxps://example[.]com/login\nApply this consistently anywhere the unsafe URL appears.\nIf verdict is LEGITIMATE:\n\nURL may be shown normally, but do not encourage clicking.\n\nRequired Output Format (Must Follow Exactly)\n\nINCIDENT RESPONSE REPORT\n\nIndicator Summary\nURL:\n\n<display analyzed URL> (defanged if PHISHING)\nVerdict:\n\nPHISHING or LEGITIMATE\nConfidence Level:\n\nHigh / Medium / Low\n\nEvidence (VirusTotal)\nTechnical Analysis:\n\nMalicious detections count: <number or \"Not provided in VirusTotal data\">\n\nSuspicious detections count: <number or \"Not provided in VirusTotal data\">\n\nHarmless detections count: <number or \"Not provided in VirusTotal data\">\n\nKey engines flagging phishing/fraud (if any): <list engines + verdict words exactly as supported>\nCategories / Tags (if present in VirusTotal):\n\n<value> OR \"Not provided in VirusTotal data\"\n\nMITRE ATT&CK Mapping\n\nTactic:\n\nTechnique:\n\nTechnique Link:\n\nSub-technique (if applicable):\n\nSub-technique Link (if applicable):\n\nEvidence:\n\n<1–3 bullets referencing VirusTotal evidence only>\n(If not applicable, explicitly state \"Not observed in VirusTotal data\")\n\nIncident Response Phases (Six-Stage)\nInclude ALL six phases below. Keep them aligned to phishing URL incidents and the VirusTotal evidence. Do not assume compromise unless supported.\n\n4.1 Preparation\n\nList relevant preparedness measures (e.g., awareness readiness, link handling guidance, email/web filtering posture, reporting procedures).\n\n4.2 Identification\n\nDescribe how the incident was identified using VirusTotal evidence only (e.g., malicious counts, explicit phishing verdict labels).\n\nIf a field is missing, state: \"Not provided in VirusTotal data.\"\n\n4.3 Containment\n\nProvide immediate containment steps to limit exposure (e.g., URL block/denylist, email gateway rules, proxy/DNS filtering, internal alerting).\n\n4.4 Eradication\n\nProvide steps to remove the threat from the environment (e.g., remove/quarantine messages containing the URL, cleanup indicators).\n\nIf compromise is not confirmed, explicitly state it is not confirmed in the provided data.\n\n4.5 Recovery\n\nProvide recovery steps (e.g., monitoring for repeat attempts, validation of blocks, user communication, safe restoration checks).\n\n4.6 Lessons Learned\n\nProvide improvements to prevent recurrence (e.g., tuning controls, updating playbooks, awareness improvements, automation enhancements).\n\nThreat Explanation (Evidence-Based)\n\nExplain why the URL is dangerous or safe using VirusTotal indicators only.\n\nMention social engineering / fake login / credential theft ONLY if explicitly supported by VirusTotal.\n\nIf unsupported, state:\n\"Specific phishing behavior (e.g., credential harvesting) was not confirmed in VirusTotal data.\"\n\nRecommended Actions\n\nContainment: block/denylist guidance\n\nUser guidance: reporting and awareness guidance\n\nMonitoring: what telemetry or logs to watch\n(If LEGITIMATE: provide cautious safe-handling guidance)\n\nExternal References\nMITRE ATT&CK:\n\n<include MITRE links only if mapped, otherwise \"Not applicable.\">\nHacker News References:\n\n<up to 3 article titles + links if provided, otherwise \"Not provided / not available in this execution.\">\n\nOutput Constraints\n\nOutput only the final report in the required format.\n\nDo not include raw JSON in the final output.\n\nDo not include internal tooling details beyond allowed references (MITRE links and HN article links)"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -224,
+        544
+      ],
+      "id": "e13bff96-9df2-4143-b8cf-72a8ed2f5a3f",
+      "name": "IncidentRespond-Agent2"
+    },
+    {
+      "parameters": {
+        "sendTo": "dduckgaming6@gmail.com",
+        "subject": "={{ \"🚨 IT Security Guidelines - \" + new Date().toISOString() }}",
+        "emailType": "text",
+        "message": "={{$json.output}}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        128,
+        0
+      ],
+      "id": "3e7a728a-57db-4dae-b7dc-5e88b97ef8ad",
+      "name": "Send a message5",
+      "webhookId": "8dd97568-2314-448f-ac22-423ac9e25e34",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "QnCRoHnHfgRYDdSg",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "dduckgaming6@gmail.com",
+        "subject": "={{ \"🚨 SOC Dept :Incident Respond - \" + new Date().toISOString() }}",
+        "emailType": "text",
+        "message": "={{$json.output}}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        128,
+        640
+      ],
+      "id": "9ad5dcf9-30a9-4dab-bafa-6ccb76cf539a",
+      "name": "Send a message6",
+      "webhookId": "8dd97568-2314-448f-ac22-423ac9e25e34",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "QnCRoHnHfgRYDdSg",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://hn.algolia.com/api/v1/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{\n  $json.attributes?.stats?.malicious > 0\n    ? \"phishing\"\n    : \"online security\"\n}}\n"
+            },
+            {
+              "name": "tags",
+              "value": "story"
+            },
+            {
+              "name": "hitsPerPage",
+              "value": "3"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -1120,
+        384
+      ],
+      "id": "2584ca34-b094-4643-91e6-aa56bfeac050",
+      "name": "HackerNews GET Request2"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -672,
+        288
+      ],
+      "id": "8c66fa81-f6d0-48dc-93e9-45376e0ccff9",
+      "name": "Merge4",
+      "alwaysOutputData": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -224,
+        192
+      ],
+      "id": "69d48d60-c499-4673-9746-1f563f3f7691",
+      "name": "OpenAI Chat Model4",
+      "credentials": {
+        "openAiApi": {
+          "id": "KI9wLBc8pJP94cco",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -224,
+        736
+      ],
+      "id": "4a820bf6-b14b-4aca-83bf-300d02c9480b",
+      "name": "OpenAI Chat Model5",
+      "credentials": {
+        "openAiApi": {
+          "id": "KI9wLBc8pJP94cco",
+          "name": "n8n free OpenAI API credits"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const hits = $json.hits || [];\n\nif (hits.length === 0) {\n  return [{\n    json: {\n      hn_article_available: false,\n      hn_article_title: null,\n      hn_article_url: null,\n      hn_article_summary: null\n    }\n  }];\n}\n\n// Pick the first (most relevant) article\nconst article = hits[0];\n\nreturn [{\n  json: {\n    hn_article_available: true,\n    hn_article_title: article.title,\n    hn_article_url: article.url,\n    hn_article_summary: \"This article discusses real-world online security and phishing-related risks.\"\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -896,
+        384
+      ],
+      "id": "7eebd175-b8b4-48c1-b553-ec895813d333",
+      "name": "Normalize HackerNews GET2"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        352,
+        336
+      ],
+      "id": "95eda438-002d-4d46-945e-0ddeab710158",
+      "name": "Merge5"
+    },
+    {
+      "parameters": {
+        "jsCode": "// =========================\n// Format_models2 (FINAL -> JSON output like before, fixes [object Object])\n// + Adds \"Email sent successfully\" confirmation from Digital Fortress\n// Output:\n// {\n//   verdict: \"PHISHING\" | \"LEGITIMATE\" | \"UNKNOWN\",\n//   incident_analysis: \"... + delivery confirmation\",\n//   email_phishing_analysis: { ... }\n// }\n// =========================\n\n// Helper: safe number parse\nconst toNum = (v) => {\n  const n = Number(v);\n  return Number.isFinite(n) ? n : null;\n};\n\n// Helper: remove leading \"=\" or \"==\"\nconst stripEq = (v) => {\n  if (v === null || v === undefined) return v;\n  if (typeof v !== \"string\") return v;\n  return v.replace(/^=+/, \"\").trim();\n};\n\n// Support both root-level email fields and nested email object (if Merge created it)\nconst email = $json.email ?? $json;\n\n// 1) Decide verdict from available fields (priority order)\nlet raw =\n  $json.verdict ??\n  $json.predicted_class ??\n  $json.result ??\n  $json.class ??\n  null;\n\nlet finalVerdict = null;\n\nif (raw !== null && raw !== undefined) {\n  const s = String(raw).trim().toLowerCase();\n\n  if (s.includes(\"phish\") || s.includes(\"malicious\") || s.includes(\"fraud\") || s.includes(\"scam\")) {\n    finalVerdict = \"PHISHING\";\n  } else if (s.includes(\"legit\") || s.includes(\"benign\") || s.includes(\"safe\") || s.includes(\"ham\")) {\n    finalVerdict = \"LEGITIMATE\";\n  } else if (s === \"1\" || s === \"true\") {\n    finalVerdict = \"PHISHING\";\n  } else if (s === \"0\" || s === \"false\") {\n    finalVerdict = \"LEGITIMATE\";\n  }\n}\n\n// 2) If still unknown, fallback to confidence/accuracy threshold (optional)\nif (!finalVerdict) {\n  const conf = toNum($json.confidence);\n  const acc = toNum($json.accuracy);\n\n  const score = conf ?? acc;\n\n  if (score !== null) {\n    finalVerdict = score >= 0.5 ? \"PHISHING\" : \"LEGITIMATE\";\n  } else {\n    finalVerdict = \"UNKNOWN\";\n  }\n}\n\n// Fix all_probabilities so it never becomes \"[object Object]\"\nlet probsOut = null;\ntry {\n  const ap = $json.all_probabilities ?? null;\n  if (ap && typeof ap === \"object\") {\n    probsOut = JSON.stringify(ap); // compact; use JSON.stringify(ap, null, 2) for pretty\n  } else if (ap !== null && ap !== undefined) {\n    probsOut = stripEq(String(ap));\n  } else {\n    probsOut = null;\n  }\n} catch (e) {\n  probsOut = stripEq(String($json.all_probabilities ?? \"\")) || null;\n}\n\n// Base incident report (from agent or existing field)\nconst baseIncident = stripEq($json.agent_output ?? $json.incident_analysis ?? \"\");\n\n// --- Delivery confirmation block (Digital Fortress) ---\nconst deliveredTo = stripEq($json.email_to ?? $json.recipient ?? $json.to ?? null);\nconst emailSubject = stripEq($json.email_subject ?? email.subject ?? null);\nconst messageId = stripEq($json.message_id ?? $json.gmail_message_id ?? null);\nconst sentAt = stripEq($json.sent_at ?? $json.timestamp ?? null);\n\n// Keep it professional and avoid inventing missing info\nconst deliveryLines = [\n  \"\",\n  \"----------------------------------------\",\n  \"DELIVERY CONFIRMATION (Digital Fortress)\",\n  \"----------------------------------------\",\n  \"This notification confirms that the incident response report was delivered by Digital Fortress automation.\",\n  \"If the recipient does not acknowledge receipt, verify mail flow, spam/quarantine, and tenant allow/block policies.\"\n];\n\nconst incidentWithConfirmation = (baseIncident ? baseIncident : \"Not provided\") + \"\\n\" + deliveryLines.join(\"\\n\");\n\nreturn [\n  {\n    json: {\n      verdict: stripEq(finalVerdict),\n\n      incident_analysis: incidentWithConfirmation,\n\n      email_phishing_analysis: {\n        subject: stripEq(email.subject ?? null),\n        sender: stripEq($json.sender ?? email.sender ?? null),\n        cleaned_body: stripEq($json.cleaned_body ?? email.cleaned_body ?? email.body ?? null),\n\n        predicted_class: stripEq($json.predicted_class ?? null),\n        confidence: stripEq($json.confidence ?? null),\n        accuracy: stripEq($json.accuracy ?? null),\n\n        all_probabilities: probsOut,\n        url_detected: stripEq($json.url_detected ?? null),\n\n        verdict: stripEq(finalVerdict)\n      }\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        336
+      ],
+      "id": "d4262e58-9d9b-4861-a943-1d5c205a8f07",
+      "name": "Format_models2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://phishing-campaignmodel-production.up.railway.app/predict",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "MY_SUPER_SECRET_KEY_123456"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"subject\": \"={{$json.subjet}}\",\n  \"sender\": \"={{$json.sender}}\",\n  \"body\": \"={{$json.body}}\"\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -2688,
+        240
+      ],
+      "id": "4df898ad-ad8b-4981-a509-1c0af58b2cc0",
+      "name": "Email_Score_Models4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const email = $json;\n\n// Your model output includes cleaned_body already.\n// If not present, fallback to original body.\nconst text = email.cleaned_body || email.body || \"\";\n\n// URL regex (http/https and www)\nconst urlRegex = /\\bhttps?:\\/\\/[^\\s<>\"']+|\\bwww\\.[^\\s<>\"']+/gi;\n\nlet urls = text.match(urlRegex) || [];\n\n// normalize \"www.\" to \"https://www.\"\nurls = urls.map(u => u.startsWith(\"www.\") ? \"https://\" + u : u);\n\n// remove trailing punctuation\nurls = urls.map(u => u.replace(/[)\\],.]+$/g, \"\"));\n\n// de-duplicate\nurls = [...new Set(urls)];\n\nreturn [{\n  json: {\n    ...email,\n    extracted_urls: urls,\n    urls_found: urls.length\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2464,
+        240
+      ],
+      "id": "275bca82-dd25-4c81-adcb-600c718017ac",
+      "name": "Extract_URLs_From_Body1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Webhook body (n8n provides it at $json.body in your current flow)\nconst b = $json.body || $json;\n\n// normalize expected fields\nconst subject = b.subject || \"\";\nconst sender  = b.sender  || \"\";\nconst body    = b.body    || b.text || b.email || \"\";\n\n// basic validation\nif (!body) throw new Error(\"Missing body in request\");\n\nreturn [{\n  json: { subject, sender, body }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2912,
+        240
+      ],
+      "id": "9e2e4102-ba94-4f74-92a9-be639df115dc",
+      "name": "Email Normalizer1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Current item: VT analysis result\nconst vt = $json;\n\n// Email context is carried through from Split_URLs\nconst email = $json.email_context || {};\n\nreturn [{\n  json: {\n    email,\n    url: $json.url,   // keep the URL you analyzed\n    vt: vt\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -896,
+        192
+      ],
+      "id": "b01d803f-5c92-4cd8-a843-29eb016d58c0",
+      "name": "Attach_Email_Context1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const urls = $json.extracted_urls || [];\nreturn urls.map(u => ({ json: { url: u } }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2240,
+        240
+      ],
+      "id": "b6b42048-2a4e-4d57-a885-5943b2c68fcd",
+      "name": "Code in JavaScript5"
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -2016,
+        240
+      ],
+      "id": "4158a200-b42e-456d-87a3-88af4aee700d",
+      "name": "Wait4",
+      "webhookId": "75c11c70-550c-4627-bcc0-6cc8ca24012f"
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -1568,
+        240
+      ],
+      "id": "1e3375b0-914a-4d7e-9527-6afa82583036",
+      "name": "Wait5",
+      "webhookId": "a8346351-7cda-4c7a-9c26-ab6ad621a25a"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://phishing-campaignmodel-production.up.railway.app/predict",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "x-api-key",
+              "value": "MY_SUPER_SECRET_KEY_123456"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"subject\": \"={{ $('Email Normalizer1').item.json.subject }}\",\n  \"sender\": \"={{ $('Email Normalizer1').item.json.sender }}\",\n  \"body\": \"={{ $('Email Normalizer1').item.json.body }}\"\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        128,
+        272
+      ],
+      "id": "76766f75-2e76-4bdc-ba4e-8f12b104f378",
+      "name": "Email_Score_Models5"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "54e82735-5e52-42a3-b117-46587c8fe8b9",
+              "leftValue": "={{ $json.data.attributes.status }}",
+              "rightValue": "completed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1120,
+        192
+      ],
+      "id": "faa97152-b0bf-460f-aafb-395db9b801ae",
+      "name": "If3"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "VirusTotal GET Request": {
+      "main": [
+        [
+          {
+            "node": "If3",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HackerNews GET Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "IncidentRespond-Agent2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "NonTech-Agent2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Email_Score_Models5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VirusTotal POST Request2": {
+      "main": [
+        [
+          {
+            "node": "Wait5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook2": {
+      "main": [
+        [
+          {
+            "node": "Email Normalizer1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format API Response2": {
+      "main": [
+        [
+          {
+            "node": "Merge5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NonTech-Agent2": {
+      "main": [
+        [
+          {
+            "node": "Send a message5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IncidentRespond-Agent2": {
+      "main": [
+        [
+          {
+            "node": "Send a message6",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Format API Response2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HackerNews GET Request2": {
+      "main": [
+        [
+          {
+            "node": "Normalize HackerNews GET2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge4": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model4": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "NonTech-Agent2",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "IncidentRespond-Agent2",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize HackerNews GET2": {
+      "main": [
+        [
+          {
+            "node": "Merge4",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge5": {
+      "main": [
+        [
+          {
+            "node": "Format_models2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format_models2": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email_Score_Models4": {
+      "main": [
+        [
+          {
+            "node": "Extract_URLs_From_Body1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract_URLs_From_Body1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Normalizer1": {
+      "main": [
+        [
+          {
+            "node": "Email_Score_Models4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attach_Email_Context1": {
+      "main": [
+        [
+          {
+            "node": "Merge4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript5": {
+      "main": [
+        [
+          {
+            "node": "Wait4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait4": {
+      "main": [
+        [
+          {
+            "node": "VirusTotal POST Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait5": {
+      "main": [
+        [
+          {
+            "node": "VirusTotal GET Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email_Score_Models5": {
+      "main": [
+        [
+          {
+            "node": "Merge5",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "If3": {
+      "main": [
+        [
+          {
+            "node": "Attach_Email_Context1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "VirusTotal GET Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message5": {
+      "main": [
+        []
+      ]
+    },
+    "Send a message6": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "f42b19a0-9182-4782-b4ac-a87229253cde",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f1f443c253eb88e85b455a00e04f21418216d84f473b67478b6d66af63cc721b"
+  },
+  "id": "dQoQmF90iSN7Qx1IKauPN",
+  "tags": []
+}
