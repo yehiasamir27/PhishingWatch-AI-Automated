@@ -26,6 +26,7 @@ Phishing triage is usually slow and inconsistent: analysts must read emails, jud
 Generates two aligned outputs:
 - Technical Incident Response report grounded in VirusTotal evidence (with MITRE mapping when supported)
 - Non-technical executive summary suitable for stakeholders
+- The agent is supported with OpenAI chat model
 
 ### 6) Automation-ready output
 Returns a structured JSON response containing:
