@@ -1,4 +1,4 @@
-﻿# PhishingWatch-AI-Automated 
+# PhishingWatch-AI-Automated 
 
 ![n8n workflow](docs/images/workflow.png)
 
@@ -15,21 +15,27 @@ Phishing triage is usually slow and inconsistent: analysts must read emails, jud
 ### 2) URL extraction → VirusTotal evidence
 - Extracts URL(s) from the email body and queries VirusTotal for reputation and vendor detections to drive an evidence-first classification.
 
-### 3) Hacker News enrichment (context)
+### 3) Zero-Day URL analysis (secondary check)
+- If VirusTotal returns **legitimate/clean**, the AI IR agent performs an additional risk analysis to assess whether the URL shows **zero-day-like behavior** (not yet flagged by VirusTotal) and highlights suspicious patterns for analyst review.
+- This step is used as **risk enrichment** and does not replace VirusTotal evidence for final reporting.
+
+### 4) Hacker News enrichment (context)
 - Adds up to 3 relevant security references from Hacker News for context (enrichment only — not used to decide the verdict).
 
-### 4) Automated reporting (technical + non-technical)
+### 5) Automated reporting (technical + non-technical)
 Generates two aligned outputs:
 - Technical Incident Response report grounded in VirusTotal evidence (with MITRE mapping when supported)
 - Non-technical executive summary suitable for stakeholders
 
-### 5) Automation-ready output
+### 6) Automation-ready output
 Returns a structured JSON response containing:
 - ML verdict + confidence
 - Extracted indicators (URLs)
 - VirusTotal evidence
+- Zero-day risk analysis notes (when applicable)
 - Optional Hacker News references
 - Generated reports
+
 This output is ready to plug into alerts, ticketing, or email notifications.
 
 ## Tech Stack
